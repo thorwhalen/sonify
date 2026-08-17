@@ -1,0 +1,4 @@
+sonification.chords
+===================
+.. automodule:: sonification.chords
+   :members:

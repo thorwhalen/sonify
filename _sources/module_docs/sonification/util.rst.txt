@@ -1,0 +1,4 @@
+sonification.util
+=================
+.. automodule:: sonification.util
+   :members:

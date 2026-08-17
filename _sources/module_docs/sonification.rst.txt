@@ -1,0 +1,4 @@
+sonification
+============
+.. automodule:: sonification
+   :members:
