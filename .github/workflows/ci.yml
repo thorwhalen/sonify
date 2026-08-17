@@ -165,8 +165,10 @@ jobs:
   #   - skip-ci-marker  : when publishing is enabled, a commit message containing
   #                       this substring skips the publish job (default "[skip ci]").
   #   - publish-enabled : whether publishing runs at all (default true).
-  #   - publish-marker  : when publishing is disabled, a commit message containing
-  #                       this substring forces the publish job (default "[publish]").
+  #   - publish-marker  : when publishing is disabled, a commit message STARTING
+  #                       WITH this string forces the publish job (default
+  #                       "[publish]"). It is deliberately a startsWith match and
+  #                       not a contains match -- see the note on the gate below.
   # The publish-enabled check uses `== 'true'` (fail-closed): if an older wads
   # without these outputs is installed by read-ci-config, publishing is skipped
   # rather than run unintentionally.
@@ -174,7 +176,19 @@ jobs:
     name: Publish
     permissions:
       contents: write
-    if: "!contains(github.event.head_commit.message, needs.setup.outputs.skip-ci-marker) && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (needs.setup.outputs.publish-enabled == 'true' || contains(github.event.head_commit.message, needs.setup.outputs.publish-marker))"
+    # The one-off publish marker is matched with startsWith, NOT contains.
+    #
+    # With `contains`, merely MENTIONING the marker anywhere in the commit
+    # message forces a publish -- and a squash-merge folds the whole PR body into
+    # that message. Not hypothetical: the run for 9851229 entered the publish job
+    # against `enabled = false`, because that PR's body explained the escape hatch
+    # in a sentence carrying the literal marker. Documenting the feature triggered
+    # the feature; the job then failed on the absent token and turned this repo's
+    # first green main in a year straight back to red.
+    #
+    # startsWith keeps the hatch usable -- a message that BEGINS with the marker
+    # is a deliberate act -- while prose that merely names it stays inert.
+    if: "!contains(github.event.head_commit.message, needs.setup.outputs.skip-ci-marker) && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (needs.setup.outputs.publish-enabled == 'true' || startsWith(github.event.head_commit.message, needs.setup.outputs.publish-marker))"
     needs: [setup, validation]
     runs-on: ubuntu-latest
 

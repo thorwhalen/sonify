@@ -164,3 +164,31 @@ def test_docs_job_does_not_depend_on_publish():
         "github-pages depends on publish, so disabling publishing also "
         f"disables docs: needs: {needs.group(1)}"
     )
+
+
+def test_publish_marker_is_matched_with_startswith_not_contains():
+    """Naming the one-off publish marker must not TRIGGER it.
+
+    A squash-merge folds the whole PR body into the commit message. With a
+    ``contains`` match, a PR body that merely explains the escape hatch -- in a
+    sentence carrying the literal marker -- forces a publish, overriding
+    ``[tool.wads.ci.publish] enabled``. That happened on 9851229: the publish job
+    ran against ``enabled = false``, failed on the absent token, and reddened the
+    first green main this repo had had in a year.
+
+    ``startsWith`` keeps the hatch usable (a message that BEGINS with the marker
+    is deliberate) while leaving prose that names it inert.
+    """
+    publish = _job_block(_workflow_text(), "publish")
+    gate = re.search(r"^    if: (.+)$", publish, re.MULTILINE)
+    assert gate is not None, "the publish job declares no if: gate"
+    condition = gate.group(1)
+
+    assert "startsWith(github.event.head_commit.message, needs.setup.outputs.publish-marker)" in condition, (
+        "the publish marker is not matched with startsWith; a PR body that "
+        f"merely mentions the marker would force a release. gate: {condition}"
+    )
+    assert "contains(github.event.head_commit.message, needs.setup.outputs.publish-marker)" not in condition, (
+        "the publish marker is still matched with contains somewhere in the "
+        f"gate, which is the bug this test exists to prevent. gate: {condition}"
+    )
