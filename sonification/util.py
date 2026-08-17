@@ -9,13 +9,13 @@ from config2py import (
 )
 from tonal import DFLT_SOUNDFONT
 
-pkg_name = 'sonification'
+pkg_name = "sonification"
 
-data_files = files(pkg_name) / 'data'
+data_files = files(pkg_name) / "data"
 
 get_config = simple_config_getter(pkg_name)
 
 
-DFLT_OUTPUT_NAME = 'audio_output'
+DFLT_OUTPUT_NAME = "audio_output"
 DFLT_MIDI_OUTPUT = f"{DFLT_OUTPUT_NAME}.mid"
 DFLT_WAV_OUTPUT = f"{DFLT_OUTPUT_NAME}.wav"
