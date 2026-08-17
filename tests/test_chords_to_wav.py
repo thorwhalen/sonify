@@ -30,7 +30,7 @@ def test_midi_to_wav_is_reachable_via_sonification_converters():
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "Upstream bug in tonal.converters.midi_to_wav (thorwhalen/tonal#4): it "
+        "Upstream bug in tonal.converters.midi_to_wav (thorwhalen/tonal#9): it "
         "invokes fluidsynth with the output options placed AFTER the positional "
         "soundfont/MIDI arguments, which fluidsynth 2.x rejects. fluidsynth "
         "still exits 0, and midi_to_wav passes no check=True and never asserts "
