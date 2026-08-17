@@ -1,0 +1,210 @@
+[build-system]
+requires = [
+    "hatchling",
+]
+build-backend = "hatchling.build"
+
+[project]
+name = "sonification"
+version = "0.0.10"
+description = "Map data to sound, allowing it to be interpreted in an auditory manner"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+keywords = [
+    "music",
+    "audio",
+    "sonification",
+    "data-sonification",
+    "midi",
+    "sound",
+]
+authors = [
+    { name = "Thor Whalen" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Topic :: Multimedia :: Sound/Audio :: MIDI",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+    "tonal",
+]
+
+[project.urls]
+Homepage = "https://github.com/thorwhalen/sonification"
+Repository = "https://github.com/thorwhalen/sonification"
+Documentation = "https://thorwhalen.github.io/sonification"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1.0",
+]
+docs = [
+    "sphinx>=6.0",
+    "sphinx-rtd-theme>=1.0",
+]
+
+# scrap/ is kept in the repo for reference but is not part of the installed
+# surface: it imports undeclared third-party packages on purpose. Shipping it
+# would put modules in the wheel that cannot be imported.
+[tool.hatch.build.targets.wheel]
+packages = [
+    "sonification",
+]
+exclude = [
+    "sonification/scrap",
+]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "sonification/scrap",
+    "misc",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+exclude = [
+    "**/*.ipynb",
+    ".git",
+    ".venv",
+    "build",
+    "dist",
+    "tests",
+    "examples",
+    "scrap",
+]
+
+[tool.ruff.lint]
+select = [
+    "D100",
+]
+ignore = [
+    "D203",
+    "E501",
+    "B905",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/*" = [
+    "D",
+]
+"**/examples/*" = [
+    "D",
+]
+"**/scrap/*" = [
+    "D",
+]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+# Both entries matter: "sonification" is what --doctest-modules walks for
+# docstring examples, "tests" is the real suite. The CI action invokes pytest
+# with no path argument, so anything absent here is silently never run.
+testpaths = [
+    "sonification",
+    "tests",
+]
+doctest_optionflags = [
+    "NORMALIZE_WHITESPACE",
+    "ELLIPSIS",
+]
+markers = [
+    "requires_audio_render: needs the fluidsynth binary and a SoundFont on disk; deselected by tests/conftest.py when either is missing",
+    "requires_repo_checkout: inspects repo files that ship in git but not in the sdist (.github/); deselected by tests/conftest.py when absent",
+]
+
+[tool.wads.ci]
+project_name = "sonification"
+
+[tool.wads.ci.commands]
+pre_test = []
+test = []
+post_test = []
+lint = []
+format = []
+
+[tool.wads.ci.env]
+required_envvars = []
+test_envvars = []
+extra_envvars = []
+
+[tool.wads.ci.env.defaults]
+
+[tool.wads.ci.quality.ruff]
+enabled = true
+
+[tool.wads.ci.quality.black]
+enabled = false
+
+[tool.wads.ci.quality.mypy]
+enabled = false
+
+[tool.wads.ci.testing]
+python_versions = [
+    "3.10",
+    "3.12",
+]
+pytest_args = [
+    "-v",
+    "--tb=short",
+]
+coverage_enabled = true
+coverage_threshold = 0
+coverage_report_format = [
+    "term",
+    "xml",
+]
+# Package-relative on purpose: these become `pytest --ignore=<path>` and are
+# resolved from the repo root, so a bare "scrap" would not match
+# sonification/scrap and those modules would be collected and fail on import.
+exclude_paths = [
+    "sonification/scrap",
+    "sonification/examples",
+]
+test_on_windows = true
+
+[tool.wads.ci.metrics]
+enabled = true
+config_path = ".github/umpyre-config.yml"
+storage_branch = "code-metrics"
+python_version = "3.10"
+force_run = false
+
+[tool.wads.ci.build]
+sdist = true
+wheel = true
+
+# Publishing is OFF until the repo has a PYPI_PASSWORD secret (a PyPI API
+# token). With it on and no token, `uv publish` runs with an empty
+# UV_PUBLISH_TOKEN and the job fails -- turning the first green CI on the
+# default branch red on the very merge that produced it.
+#
+# This flag is load-bearing: the publish job's `if:` reads it through the
+# setup job's publish-enabled output. To start releasing, add the secret and
+# flip this to true. For a single release without flipping it, put the
+# publish_marker below in the merge commit message.
+[tool.wads.ci.publish]
+enabled = false
+publish_marker = "[publish]"
+
+[tool.wads.ci.docs]
+enabled = true
+builder = "epythet"
+ignore_paths = [
+    "tests/",
+    "scrap/",
+    "examples/",
+]
