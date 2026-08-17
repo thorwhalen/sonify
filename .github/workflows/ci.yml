@@ -1,5 +1,10 @@
 name: Continuous Integration (uv)
-# MIGRATION NOTE: PyPI auth changed: set secrets.PYPI_PASSWORD to a PyPI API token (uv publish uses UV_PUBLISH_TOKEN, mapped from PYPI_PASSWORD)
+# MIGRATION NOTE: PyPI auth changed: set secrets.PYPI_PASSWORD to a PyPI API
+# token (uv publish reads UV_PUBLISH_TOKEN, mapped from PYPI_PASSWORD).
+# Until that secret exists the publish job is switched OFF at source, via
+# [tool.wads.ci.publish].enabled = false in pyproject.toml -- see the gate on
+# the publish job below. No SSH deploy key is needed: the version push-back
+# rides on GITHUB_TOKEN.
 on: [push, pull_request]
 
 # Note: Environment variables (PROJECT_NAME and vars from [tool.wads.ci.env])
@@ -29,6 +34,13 @@ jobs:
       black-enabled: ${{ steps.config.outputs.black-enabled }}
       mypy-enabled: ${{ steps.config.outputs.mypy-enabled }}
       docs-enabled: ${{ steps.config.outputs.docs-enabled }}
+      # An output referenced by a job `if:` but NOT declared here evaluates to
+      # the empty string rather than erroring, so the gate silently does
+      # nothing. tests/test_ci_workflow_contract.py fails if any
+      # `needs.setup.outputs.X` used below is missing from this block.
+      publish-enabled: ${{ steps.config.outputs.publish-enabled }}
+      skip-ci-marker: ${{ steps.config.outputs.skip-ci-marker }}
+      publish-marker: ${{ steps.config.outputs.publish-marker }}
 
     steps:
       - uses: actions/checkout@v6
@@ -148,15 +160,32 @@ jobs:
           exclude-paths: ${{ needs.setup.outputs.exclude-paths }}
 
   # Publishing job
+  #
+  # Gated by [tool.wads.ci.publish] in pyproject.toml (read via the setup job):
+  #   - skip-ci-marker  : when publishing is enabled, a commit message containing
+  #                       this substring skips the publish job (default "[skip ci]").
+  #   - publish-enabled : whether publishing runs at all (default true).
+  #   - publish-marker  : when publishing is disabled, a commit message containing
+  #                       this substring forces the publish job (default "[publish]").
+  # The publish-enabled check uses `== 'true'` (fail-closed): if an older wads
+  # without these outputs is installed by read-ci-config, publishing is skipped
+  # rather than run unintentionally.
   publish:
     name: Publish
     permissions:
       contents: write
-    if: "!contains(github.event.head_commit.message, '[skip ci]') && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')"
+    if: "!contains(github.event.head_commit.message, needs.setup.outputs.skip-ci-marker) && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (needs.setup.outputs.publish-enabled == 'true' || contains(github.event.head_commit.message, needs.setup.outputs.publish-marker))"
     needs: [setup, validation]
     runs-on: ubuntu-latest
 
     steps:
+      # `actions/checkout@v6` defaults to persist-credentials: true, configuring
+      # HTTPS auth in .git/config using `secrets.GITHUB_TOKEN`. Together with the
+      # job-level `permissions: contents: write`, this is exactly what the
+      # post-publish push-back needs -- no per-repo SSH deploy key required. Do
+      # NOT re-add a "Force SSH for git remote" step: rewriting origin to an
+      # SSH URL overrides these credentials and reintroduces the push-back
+      # failure on every repo lacking an SSH_PRIVATE_KEY deploy key.
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
@@ -194,14 +223,10 @@ jobs:
         with:
           pypi-token: ${{ secrets.PYPI_PASSWORD }}
 
-      - name: Force SSH for git remote
-        run: git remote set-url origin git@github.com:${{ github.repository }}.git
-
       - name: Commit Changes
         uses: i2mint/wads/actions/git-commit@master
         with:
           commit-message: "**CI** Formatted code + Updated version to ${{ env.VERSION }} [skip ci]"
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
           push: true
 
       - name: Tag Repository
@@ -212,6 +237,10 @@ jobs:
           push: true
 
   # Optional GitHub Pages (skipped when [tool.wads.ci.docs].enabled = false)
+  # Depends on validation (not publish) so docs still publish when the publish
+  # job is disabled via [tool.wads.ci.publish].enabled = false. A job whose
+  # dependency is skipped is itself skipped, so `needs: publish` would have
+  # silently taken the docs down with it.
   github-pages:
     name: Publish GitHub Pages
     permissions:
@@ -219,10 +248,24 @@ jobs:
       pages: write
       id-token: write
     if: "!contains(github.event.head_commit.message, '[skip ci]') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && needs.setup.outputs.docs-enabled != 'false'"
-    needs: [setup, publish]
+    needs: [setup, validation]
     runs-on: ubuntu-latest
 
     steps:
+      # Check out first so install-system-deps can read [tool.wads.ops.*] from
+      # pyproject.toml. The epythet action self-checks-out again internally;
+      # apt-installed system deps persist across that re-checkout.
+      - uses: actions/checkout@v6
+
+      # Install [tool.wads.ops.*] system deps so the epythet docs build, which
+      # pip-installs this package to extract docstrings, doesn't fail on a
+      # missing native library at import time. No-op when none are declared --
+      # present so the Pages environment cannot drift from Validation's.
+      - name: Install System Dependencies
+        uses: i2mint/wads/actions/install-system-deps@master
+        with:
+          pyproject-path: .
+
       - uses: i2mint/epythet/actions/publish-github-pages@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
